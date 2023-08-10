@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"html/template"
@@ -22,7 +23,11 @@ type Page struct {
 	IsHeaderLink bool      `yaml:"is_header_link"`
 	HtmlContent  template.HTML
 	MdContent    []byte
-	HeaderLinks  []*Page
+	HeaderLinks  []Page
+}
+
+func (p *Page) DisplayDate() string {
+	return p.Date.Format("01.02.2006")
 }
 
 func main() {
@@ -40,8 +45,14 @@ func main() {
 	}
 
 	pages = extractFrontMatter(pages)
+	pages = setHeaderLinks(pages)
 	pages = generateHtmlContent(pages)
 	err = writePagesToFiles(pages, basePath)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	err = buildIndexPage(pages, basePath)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -158,4 +169,47 @@ func writePagesToFiles(pages []Page, basePath string) error {
 	}
 
 	return nil
+}
+
+func buildIndexPage(pages []Page, basePath string) error {
+	listTemplate := template.Must(template.ParseFiles(basePath + "/templates/page_list.html"))
+	pageTemplate := template.Must(template.ParseFiles(basePath + "/templates/page.html"))
+
+	listBuffer := &bytes.Buffer{}
+	listTemplate.Execute(listBuffer, struct{ Pages []Page }{pages})
+
+	indexPage := Page{
+		Title:       "Josh Marchello",
+		HtmlContent: template.HTML(listBuffer.String()),
+	}
+
+	filePath := fmt.Sprintf("%v/site/index.html", basePath)
+	f, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	err = pageTemplate.Execute(f, indexPage)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func setHeaderLinks(pages []Page) []Page {
+	var headerLinks []Page
+	for _, page := range pages {
+		if page.IsHeaderLink {
+			headerLinks = append(headerLinks, page)
+		}
+	}
+
+	var newPages []Page
+	for _, page := range pages {
+		page.HeaderLinks = headerLinks
+		newPages = append(newPages, page)
+	}
+
+	return newPages
 }
