@@ -45,14 +45,14 @@ func main() {
 	}
 
 	pages = extractFrontMatter(pages)
-	pages = setHeaderLinks(pages)
+	pages, headerLinks := setHeaderLinks(pages)
 	pages = generateHtmlContent(pages)
 	err = writePagesToFiles(pages, basePath)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	err = buildIndexPage(pages, basePath)
+	err = buildIndexPage(pages, headerLinks, basePath)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -171,16 +171,23 @@ func writePagesToFiles(pages []Page, basePath string) error {
 	return nil
 }
 
-func buildIndexPage(pages []Page, basePath string) error {
+func buildIndexPage(pages []Page, headerLinks []Page, basePath string) error {
 	listTemplate := template.Must(template.ParseFiles(basePath + "/templates/page_list.html"))
 	pageTemplate := template.Must(template.ParseFiles(basePath + "/templates/page.html"))
 
 	listBuffer := &bytes.Buffer{}
-	listTemplate.Execute(listBuffer, struct{ Pages []Page }{pages})
+	var listPages []Page
+	for _, page := range pages {
+		if !page.IsHeaderLink {
+			listPages = append(listPages, page)
+		}
+	}
+	listTemplate.Execute(listBuffer, struct{ Pages []Page }{listPages})
 
 	indexPage := Page{
 		Title:       "Josh Marchello",
 		HtmlContent: template.HTML(listBuffer.String()),
+		HeaderLinks: headerLinks,
 	}
 
 	filePath := fmt.Sprintf("%v/site/index.html", basePath)
@@ -197,7 +204,7 @@ func buildIndexPage(pages []Page, basePath string) error {
 	return nil
 }
 
-func setHeaderLinks(pages []Page) []Page {
+func setHeaderLinks(pages []Page) ([]Page, []Page) {
 	var headerLinks []Page
 	for _, page := range pages {
 		if page.IsHeaderLink {
@@ -211,5 +218,5 @@ func setHeaderLinks(pages []Page) []Page {
 		newPages = append(newPages, page)
 	}
 
-	return newPages
+	return newPages, headerLinks
 }
