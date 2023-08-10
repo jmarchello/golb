@@ -3,10 +3,11 @@ package main
 import (
 	"errors"
 	"fmt"
+	"html/template"
 	"io/ioutil"
 	"os"
-	"time"
 	"regexp"
+	"time"
 
 	"github.com/gomarkdown/markdown"
 	"github.com/gomarkdown/markdown/html"
@@ -19,7 +20,7 @@ type Page struct {
 	Title        string    `yaml:"title"`
 	Date         time.Time `yaml:"date"`
 	IsHeaderLink bool      `yaml:"is_header_link"`
-	HtmlContent  []byte
+	HtmlContent  template.HTML
 	MdContent    []byte
 	HeaderLinks  []*Page
 }
@@ -39,7 +40,12 @@ func main() {
 	}
 
 	pages = extractFrontMatter(pages)
-	fmt.Printf("%+v\n", pages[0])
+	pages = generateHtmlContent(pages)
+	err = writePagesToFiles(pages, basePath)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
 
 func checkArgs() (bool, error) {
@@ -59,7 +65,7 @@ func checkArgs() (bool, error) {
 	return true, nil
 }
 
-func mdToHTML(md []byte) []byte {
+func mdToHTML(md []byte) string {
 	// create markdown parser with extensions
 	extensions := parser.CommonExtensions | parser.AutoHeadingIDs | parser.NoEmptyLineBeforeBlock
 	p := parser.NewWithExtensions(extensions)
@@ -70,7 +76,7 @@ func mdToHTML(md []byte) []byte {
 	opts := html.RendererOptions{Flags: htmlFlags}
 	renderer := html.NewRenderer(opts)
 
-	return markdown.Render(doc, renderer)
+	return string(markdown.Render(doc, renderer))
 }
 
 func readMdFiles(basePath string) ([]Page, error) {
@@ -103,8 +109,8 @@ func readMdFiles(basePath string) ([]Page, error) {
 	return pages, nil
 }
 
-func extractFrontMatter(pages []Page) ([]Page) {
-	re := regexp.MustCompile(`(?s)^---\n(.+?)\n---\n`)
+func extractFrontMatter(pages []Page) []Page {
+	re := regexp.MustCompile(`(?s)^---\n(.+?)\n---\n(.*)`)
 	var newPages []Page
 
 	for _, page := range pages {
@@ -113,7 +119,43 @@ func extractFrontMatter(pages []Page) ([]Page) {
 		if err != nil {
 			fmt.Println(err)
 		}
+		page.MdContent = match[2]
 		newPages = append(newPages, page)
 	}
 	return newPages
+}
+
+func generateHtmlContent(pages []Page) []Page {
+	var newPages []Page
+	for _, page := range pages {
+		page.HtmlContent = template.HTML(mdToHTML(page.MdContent))
+		newPages = append(newPages, page)
+	}
+	return newPages
+}
+
+func writePagesToFiles(pages []Page, basePath string) error {
+	os.RemoveAll(basePath + "/site")
+	err := os.Mkdir(basePath+"/site", 0750)
+	if err != nil {
+		return err
+	}
+
+	t := template.Must(template.ParseFiles(basePath + "/templates/page.html"))
+
+	for _, page := range pages {
+		filePath := fmt.Sprintf("%v/site/%v.html", basePath, page.Path)
+		f, err := os.Create(filePath)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		err = t.Execute(f, page)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
