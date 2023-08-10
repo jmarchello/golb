@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"regexp"
+	"sort"
 	"time"
 
 	"github.com/gomarkdown/markdown"
@@ -182,6 +183,10 @@ func buildIndexPage(pages []Page, headerLinks []Page, basePath string) error {
 			listPages = append(listPages, page)
 		}
 	}
+	sort.SliceStable(listPages, func(i, j int) bool {
+		return listPages[i].Date.Before(listPages[j].Date)
+	})
+
 	listTemplate.Execute(listBuffer, struct{ Pages []Page }{listPages})
 
 	indexPage := Page{
