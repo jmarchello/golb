@@ -184,7 +184,7 @@ func buildIndexPage(pages []Page, headerLinks []Page, basePath string) error {
 		}
 	}
 	sort.SliceStable(listPages, func(i, j int) bool {
-		return listPages[i].Date.Before(listPages[j].Date)
+		return listPages[i].Date.After(listPages[j].Date)
 	})
 
 	listTemplate.Execute(listBuffer, struct{ Pages []Page }{listPages})
