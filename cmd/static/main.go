@@ -5,31 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"io/ioutil"
 	"os"
 	"regexp"
 	"sort"
-	"time"
 
 	"github.com/gomarkdown/markdown"
 	"github.com/gomarkdown/markdown/html"
 	"github.com/gomarkdown/markdown/parser"
+	m "github.com/jmarchello/golb/internal/model"
 	"gopkg.in/yaml.v3"
 )
-
-type Page struct {
-	Path         string    `yaml:"path"`
-	Title        string    `yaml:"title"`
-	Date         time.Time `yaml:"date"`
-	IsHeaderLink bool      `yaml:"is_header_link"`
-	HtmlContent  template.HTML
-	MdContent    []byte
-	HeaderLinks  []Page
-}
-
-func (p *Page) DisplayDate() string {
-	return p.Date.Format("01.02.2006")
-}
 
 func main() {
 	_, err := checkArgs()
@@ -91,11 +76,11 @@ func mdToHTML(md []byte) string {
 	return string(markdown.Render(doc, renderer))
 }
 
-func readMdFiles(basePath string) ([]Page, error) {
-	var pages []Page
+func readMdFiles(basePath string) ([]m.Page, error) {
+	var pages []m.Page
 	markdownPath := basePath + "/markdown/"
 
-	files, err := ioutil.ReadDir(markdownPath)
+	files, err := os.ReadDir(markdownPath)
 	if err != nil {
 		return nil, err
 	}
@@ -103,27 +88,27 @@ func readMdFiles(basePath string) ([]Page, error) {
 	// Loop through each file in the directory
 	for _, file := range files {
 		// Check if it's a regular file (not a directory)
-		if file.Mode().IsRegular() {
+		if !file.IsDir() {
 			// Get the file path
 			filePath := markdownPath + file.Name()
 
 			// Read the file
-			data, err := ioutil.ReadFile(filePath)
+			data, err := os.ReadFile(filePath)
 			if err != nil {
 				fmt.Println(err)
 				continue
 			}
 
-			pages = append(pages, Page{MdContent: data})
+			pages = append(pages, m.Page{MdContent: data})
 		}
 	}
 
 	return pages, nil
 }
 
-func extractFrontMatter(pages []Page) []Page {
+func extractFrontMatter(pages []m.Page) []m.Page {
 	re := regexp.MustCompile(`(?s)^---\n(.+?)\n---\n(.*)`)
-	var newPages []Page
+	var newPages []m.Page
 
 	for _, page := range pages {
 		match := re.FindSubmatch(page.MdContent)
@@ -137,8 +122,8 @@ func extractFrontMatter(pages []Page) []Page {
 	return newPages
 }
 
-func generateHtmlContent(pages []Page) []Page {
-	var newPages []Page
+func generateHtmlContent(pages []m.Page) []m.Page {
+	var newPages []m.Page
 	for _, page := range pages {
 		page.HtmlContent = template.HTML(mdToHTML(page.MdContent))
 		newPages = append(newPages, page)
@@ -146,7 +131,7 @@ func generateHtmlContent(pages []Page) []Page {
 	return newPages
 }
 
-func writePagesToFiles(pages []Page, basePath string) error {
+func writePagesToFiles(pages []m.Page, basePath string) error {
 	os.RemoveAll(basePath + "/site")
 	err := os.Mkdir(basePath+"/site", 0750)
 	if err != nil {
@@ -172,12 +157,12 @@ func writePagesToFiles(pages []Page, basePath string) error {
 	return nil
 }
 
-func buildIndexPage(pages []Page, headerLinks []Page, basePath string) error {
+func buildIndexPage(pages []m.Page, headerLinks []m.Page, basePath string) error {
 	listTemplate := template.Must(template.ParseFiles(basePath + "/templates/page_list.html"))
 	pageTemplate := template.Must(template.ParseFiles(basePath + "/templates/page.html"))
 
 	listBuffer := &bytes.Buffer{}
-	var listPages []Page
+	var listPages []m.Page
 	for _, page := range pages {
 		if !page.IsHeaderLink {
 			listPages = append(listPages, page)
@@ -187,9 +172,9 @@ func buildIndexPage(pages []Page, headerLinks []Page, basePath string) error {
 		return listPages[i].Date.After(listPages[j].Date)
 	})
 
-	listTemplate.Execute(listBuffer, struct{ Pages []Page }{listPages})
+	listTemplate.Execute(listBuffer, struct{ Pages []m.Page }{listPages})
 
-	indexPage := Page{
+	indexPage := m.Page{
 		Title:       "Josh Marchello",
 		HtmlContent: template.HTML(listBuffer.String()),
 		HeaderLinks: headerLinks,
@@ -209,15 +194,15 @@ func buildIndexPage(pages []Page, headerLinks []Page, basePath string) error {
 	return nil
 }
 
-func setHeaderLinks(pages []Page) ([]Page, []Page) {
-	var headerLinks []Page
+func setHeaderLinks(pages []m.Page) ([]m.Page, []m.Page) {
+	var headerLinks []m.Page
 	for _, page := range pages {
 		if page.IsHeaderLink {
 			headerLinks = append(headerLinks, page)
 		}
 	}
 
-	var newPages []Page
+	var newPages []m.Page
 	for _, page := range pages {
 		page.HeaderLinks = headerLinks
 		newPages = append(newPages, page)
