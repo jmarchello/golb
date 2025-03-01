@@ -17,20 +17,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type Page struct {
-	Path         string    `yaml:"path"`
-	Title        string    `yaml:"title"`
-	Date         time.Time `yaml:"date"`
-	IsHeaderLink bool      `yaml:"is_header_link"`
-	HtmlContent  template.HTML
-	MdContent    []byte
-	HeaderLinks  []Page
-}
-
-func (p *Page) DisplayDate() string {
-	return p.Date.Format("01.02.2006")
-}
-
 func main() {
 	_, err := checkArgs()
 	if err != nil {
@@ -54,6 +40,11 @@ func main() {
 		os.Exit(1)
 	}
 	err = buildIndexPage(pages, headerLinks, basePath)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	err = writeAtomFeed(pages, basePath)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -224,4 +215,26 @@ func setHeaderLinks(pages []Page) ([]Page, []Page) {
 	}
 
 	return newPages, headerLinks
+}
+
+func writeAtomFeed(pages []Page, basePath string) error {
+	// TODO: get these values from a config or something
+	feed := Feed{
+		Title:   "Josh Marchello",
+		Link:    "https://jmarchello.com",
+		Updated: time.Now(),
+		Author:  "Josh Marchello",
+	}
+
+	for _, page := range pages {
+		entry := FeedEntry{
+			Title:   page.Title,
+			Link:    feed.Link + "/" + page.Path,
+			Updated: page.Date,
+			Content: page.HtmlContent,
+		}
+		feed.Entries = append(feed.Entries, entry)
+	}
+	err := feed.Render(basePath + "/site/feed.xml")
+	return err
 }
